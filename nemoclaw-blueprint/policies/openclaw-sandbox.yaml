@@ -136,6 +136,19 @@ network_policies:
   # GitHub access when the user explicitly selects the `github` preset
   # during onboard. See #1583.
 
+  github:
+    name: github
+    endpoints:
+      - host: github.com
+        port: 443
+        access: full
+      - host: api.github.com
+        port: 443
+        access: full
+    binaries:
+      - { path: /usr/bin/gh }
+      - { path: /usr/bin/git }
+
   # ── OpenClaw "phone home" ────────────────────────────────────────────
   # Minimum viable set for OpenClaw to authenticate, discover plugins,
   # and reach ClawHub. Restricted to openclaw and node (skill flows run on Node).
