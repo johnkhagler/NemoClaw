@@ -63,6 +63,10 @@ function stageOptimizedSandboxBuildContext(rootDir, tmpDir = os.tmpdir()) {
     path.join(rootDir, "scripts", "nemoclaw-start.sh"),
     path.join(stagedScriptsDir, "nemoclaw-start.sh"),
   );
+  fs.copyFileSync(
+    path.join(rootDir, "scripts", "mcp-sse-bridge.js"),
+    path.join(stagedScriptsDir, "mcp-sse-bridge.js"),
+  );
 
   return { buildCtx, stagedDockerfile };
 }
