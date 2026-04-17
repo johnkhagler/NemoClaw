@@ -47,9 +47,10 @@ RUN npm ci --omit=dev
 RUN mkdir -p /sandbox/.nemoclaw/blueprints/0.1.0 \
     && cp -r /opt/nemoclaw-blueprint/* /sandbox/.nemoclaw/blueprints/0.1.0/
 
-# Copy startup script
+# Copy startup script and MCP stdio-to-SSE bridge
 COPY scripts/nemoclaw-start.sh /usr/local/bin/nemoclaw-start
-RUN chmod 755 /usr/local/bin/nemoclaw-start
+COPY scripts/mcp-sse-bridge.js /usr/local/bin/mcp-sse-bridge
+RUN chmod 755 /usr/local/bin/nemoclaw-start /usr/local/bin/mcp-sse-bridge
 
 # Build args for config that varies per deployment.
 # nemoclaw onboard passes these at image build time.
@@ -61,6 +62,10 @@ ARG NEMOCLAW_INFERENCE_BASE_URL=https://inference.local/v1
 ARG NEMOCLAW_INFERENCE_API=openai-completions
 ARG NEMOCLAW_INFERENCE_COMPAT_B64=e30=
 ARG NEMOCLAW_WEB_CONFIG_B64=e30=
+# Base64-encoded JSON map of MCP server configs to bake into openclaw.json.
+# Format: {"<name>":{"url":"<url>","transport":"sse"}} or similar.
+# Default: empty map (no MCP servers).
+ARG NEMOCLAW_MCP_SERVERS_B64=e30=
 # Base64-encoded JSON list of messaging channel names to pre-configure
 # (e.g. ["discord","telegram"]). Channels are added with placeholder tokens
 # so the L7 proxy can rewrite them at egress. Default: empty list.
@@ -97,6 +102,7 @@ ENV NEMOCLAW_MODEL=${NEMOCLAW_MODEL} \
     NEMOCLAW_INFERENCE_API=${NEMOCLAW_INFERENCE_API} \
     NEMOCLAW_INFERENCE_COMPAT_B64=${NEMOCLAW_INFERENCE_COMPAT_B64} \
     NEMOCLAW_WEB_CONFIG_B64=${NEMOCLAW_WEB_CONFIG_B64} \
+    NEMOCLAW_MCP_SERVERS_B64=${NEMOCLAW_MCP_SERVERS_B64} \
     NEMOCLAW_MESSAGING_CHANNELS_B64=${NEMOCLAW_MESSAGING_CHANNELS_B64} \
     NEMOCLAW_MESSAGING_ALLOWED_IDS_B64=${NEMOCLAW_MESSAGING_ALLOWED_IDS_B64} \
     NEMOCLAW_DISCORD_GUILDS_B64=${NEMOCLAW_DISCORD_GUILDS_B64} \
@@ -123,6 +129,7 @@ inference_base_url = os.environ['NEMOCLAW_INFERENCE_BASE_URL']; \
 inference_api = os.environ['NEMOCLAW_INFERENCE_API']; \
 inference_compat = json.loads(base64.b64decode(os.environ['NEMOCLAW_INFERENCE_COMPAT_B64']).decode('utf-8')); \
 web_config = json.loads(base64.b64decode(os.environ.get('NEMOCLAW_WEB_CONFIG_B64', 'e30=') or 'e30=').decode('utf-8')); \
+mcp_servers = json.loads(base64.b64decode(os.environ.get('NEMOCLAW_MCP_SERVERS_B64', 'e30=') or 'e30=').decode('utf-8')); \
 msg_channels = json.loads(base64.b64decode(os.environ.get('NEMOCLAW_MESSAGING_CHANNELS_B64', 'W10=') or 'W10=').decode('utf-8')); \
 _allowed_ids = json.loads(base64.b64decode(os.environ.get('NEMOCLAW_MESSAGING_ALLOWED_IDS_B64', 'e30=') or 'e30=').decode('utf-8')); \
 _discord_guilds = json.loads(base64.b64decode(os.environ.get('NEMOCLAW_DISCORD_GUILDS_B64', 'e30=') or 'e30=').decode('utf-8')); \
@@ -173,6 +180,10 @@ config.update({ \
         } \
     } \
 } if web_config.get('provider') == 'brave' else {}); \
+config.update({'mcp': {'servers': mcp_servers}}) if mcp_servers else None; \
+_stdio_cfg = {k: {kk: vv for kk, vv in v.items() if kk in ('command', 'args', 'env')} for k, v in mcp_servers.items() if v.get('command')}; \
+config.setdefault('plugins', {}).setdefault('entries', {}).setdefault('acpx', {}).setdefault('config', {}).setdefault('mcpServers', {}).update(_stdio_cfg) if _stdio_cfg else None; \
+config.setdefault('commands', {})['mcp'] = bool(mcp_servers); \
 path = os.path.expanduser('~/.openclaw/openclaw.json'); \
 json.dump(config, open(path, 'w'), indent=2); \
 os.chmod(path, 0o600)"

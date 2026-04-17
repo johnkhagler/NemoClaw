@@ -375,6 +375,113 @@ PYCORS
   printf '[config] Config hash recomputed after CORS override\n' >&2
 }
 
+# ── Runtime MCP server override ───────────────────────────────────
+# Injects mcp.servers entries into openclaw.json at startup when
+# NEMOCLAW_MCP_SERVERS is set to a JSON object. Allows adding host-side
+# MCP servers (e.g. mem0, filesystem) without rebuilding the sandbox image.
+# Runs AFTER integrity check and BEFORE chattr +i.
+#
+# SECURITY: Env var comes from the host (Docker/OpenShell), not the agent.
+# The value must be a JSON object whose values are valid McpServerConfig
+# objects (url+transport or command+args). Control characters are rejected.
+# Ref: https://github.com/NVIDIA/NemoClaw/issues/759
+
+apply_mcp_override() {
+  [ -n "${NEMOCLAW_MCP_SERVERS:-}" ] || return 0
+
+  if [ "$(id -u)" -ne 0 ]; then
+    printf '[SECURITY] NEMOCLAW_MCP_SERVERS ignored — requires root (non-root mode cannot write to config)\n' >&2
+    return 0
+  fi
+
+  local config_file="/sandbox/.openclaw/openclaw.json"
+  local hash_file="/sandbox/.openclaw/.config-hash"
+
+  if [ -L "$config_file" ] || [ -L "$hash_file" ]; then
+    printf '[SECURITY] Refusing MCP override — config or hash path is a symlink\n' >&2
+    return 1
+  fi
+
+  # SECURITY: Reject control characters before handing off to Python.
+  if printf '%s' "$NEMOCLAW_MCP_SERVERS" | grep -qP '[\x00-\x1f\x7f]'; then
+    printf '[SECURITY] NEMOCLAW_MCP_SERVERS contains control characters — refusing\n' >&2
+    return 1
+  fi
+  # Enforce a reasonable size limit (16 KB) to prevent runaway env vars.
+  if [ "${#NEMOCLAW_MCP_SERVERS}" -gt 16384 ]; then
+    printf '[SECURITY] NEMOCLAW_MCP_SERVERS exceeds 16384 characters — refusing\n' >&2
+    return 1
+  fi
+
+  printf '[config] Applying MCP server override\n' >&2
+
+  NEMOCLAW_MCP_SERVERS="$NEMOCLAW_MCP_SERVERS" \
+    python3 - "$config_file" <<'PYMCP'
+import json, os, sys
+
+config_file = sys.argv[1]
+raw = os.environ.get("NEMOCLAW_MCP_SERVERS", "")
+
+try:
+    servers = json.loads(raw)
+except json.JSONDecodeError as e:
+    print(f"[SECURITY] NEMOCLAW_MCP_SERVERS is not valid JSON: {e}", file=sys.stderr)
+    sys.exit(1)
+
+if not isinstance(servers, dict):
+    print("[SECURITY] NEMOCLAW_MCP_SERVERS must be a JSON object — refusing", file=sys.stderr)
+    sys.exit(1)
+
+# Validate each entry: must have either 'url' (HTTP transport)
+# or 'command' (stdio transport), but not neither.
+for name, srv in servers.items():
+    if not isinstance(srv, dict):
+        print(f"[SECURITY] MCP server '{name}' is not an object — refusing", file=sys.stderr)
+        sys.exit(1)
+    if not srv.get("url") and not srv.get("command"):
+        print(f"[SECURITY] MCP server '{name}' must have 'url' or 'command' — refusing", file=sys.stderr)
+        sys.exit(1)
+
+with open(config_file) as f:
+    cfg = json.load(f)
+
+existing = cfg.get("mcp", {}).get("servers", {})
+existing.update(servers)
+cfg.setdefault("mcp", {})["servers"] = existing
+
+# Also inject command-type (stdio) servers into plugins.entries.acpx.config.mcpServers
+# so the acpx gateway plugin can spawn them directly (acpx only supports stdio).
+stdio_servers = {
+    name: {k: v for k, v in srv.items() if k in ("command", "args", "env")}
+    for name, srv in servers.items()
+    if srv.get("command")
+}
+if stdio_servers:
+    (cfg.setdefault("plugins", {})
+        .setdefault("entries", {})
+        .setdefault("acpx", {})
+        .setdefault("config", {})
+        .setdefault("mcpServers", {})
+        .update(stdio_servers))
+
+with open(config_file, "w") as f:
+    json.dump(cfg, f, indent=2)
+
+print(f"[config] MCP servers injected: {list(servers.keys())}", file=sys.stderr)
+if stdio_servers:
+    print(f"[config] acpx mcpServers injected: {list(stdio_servers.keys())}", file=sys.stderr)
+PYMCP
+
+  local py_exit=$?
+  if [ $py_exit -ne 0 ]; then
+    printf '[SECURITY] MCP override failed — refusing to start\n' >&2
+    return 1
+  fi
+
+  (cd /sandbox/.openclaw && sha256sum openclaw.json >"$hash_file")
+  printf '[config] Config hash recomputed after MCP override\n' >&2
+}
+
 _read_gateway_token() {
   python3 - <<'PYTOKEN'
 import json
@@ -793,6 +900,7 @@ if [ "$(id -u)" -ne 0 ]; then
   fi
   apply_model_override
   apply_cors_override
+  apply_mcp_override
   export_gateway_token
   install_configure_guard
   configure_messaging_channels
@@ -892,6 +1000,7 @@ fi
 verify_config_integrity
 apply_model_override
 apply_cors_override
+apply_mcp_override
 export_gateway_token
 install_configure_guard
 

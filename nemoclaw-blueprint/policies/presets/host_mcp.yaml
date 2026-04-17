@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+preset:
+  name: host_mcp
+  description: "Host-side MCP server access (dell-workstation, port 5010)"
+
+network_policies:
+  host_mcp:
+    name: host_mcp
+    endpoints:
+      - host: 172.17.0.1
+        port: 5010
+        protocol: rest
+        enforcement: enforce
+        allowed_ips:
+          - "172.17.0.1/32"
+        rules:
+          - allow: { method: GET, path: "/**" }
+          - allow: { method: POST, path: "/**" }
+          - allow: { method: OPTIONS, path: "/**" }
+    binaries:
+      - { path: /usr/local/bin/openclaw }
+      - { path: /usr/local/bin/node }
+      - { path: /usr/local/bin/node* }
+      - { path: /usr/bin/node* }

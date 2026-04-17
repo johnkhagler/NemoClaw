@@ -1036,6 +1036,14 @@ function patchStagedDockerfile(
       `ARG NEMOCLAW_DISCORD_GUILDS_B64=${encodeDockerJsonArg(discordGuilds)}`,
     );
   }
+  const mcpServersRaw = (process.env.NEMOCLAW_MCP_SERVERS ?? "").trim();
+  const mcpServers = mcpServersRaw ? (JSON.parse(mcpServersRaw) as Record<string, unknown>) : {};
+  if (Object.keys(mcpServers).length > 0) {
+    dockerfile = dockerfile.replace(
+      /^ARG NEMOCLAW_MCP_SERVERS_B64=.*$/m,
+      `ARG NEMOCLAW_MCP_SERVERS_B64=${encodeDockerJsonArg(mcpServers)}`,
+    );
+  }
   fs.writeFileSync(dockerfilePath, dockerfile);
 }
 
@@ -2554,6 +2562,12 @@ async function createSandbox(
   // See: crates/openshell-sandbox/src/secrets.rs (placeholder rewriting),
   //      crates/openshell-router/src/backend.rs (inference auth injection).
   const envArgs = [formatEnvAssignment("CHAT_UI_URL", chatUiUrl)];
+  // Pass NEMOCLAW_MCP_SERVERS into the container CMD so apply_mcp_override()
+  // in nemoclaw-start.sh can inject the servers into openclaw.json at startup.
+  const mcpServersRaw = (process.env.NEMOCLAW_MCP_SERVERS ?? "").trim();
+  if (mcpServersRaw) {
+    envArgs.push(formatEnvAssignment("NEMOCLAW_MCP_SERVERS", mcpServersRaw));
+  }
   const blockedSandboxEnvNames = new Set([
     // Derived from REMOTE_PROVIDER_CONFIG to prevent drift
     ...Object.values(REMOTE_PROVIDER_CONFIG)

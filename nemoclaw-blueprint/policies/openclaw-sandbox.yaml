@@ -198,6 +198,31 @@ network_policies:
     binaries:
       - { path: /usr/local/bin/openclaw }
 
+  # Host-side MCP server (dell-workstation) — allows the sandbox OpenClaw gateway
+  # to connect to the mem0 MCP HTTP/SSE server running on the host via the
+  # Docker bridge address. The MCP server itself (not the sandbox) handles
+  # Ollama/Qdrant calls, so no additional egress from the sandbox is needed.
+  # Port 5010 is the mem0-mcp-dev service port; add more entries for future
+  # host-side MCP servers (e.g. filesystem, github) as they are added.
+  host_mcp:
+    name: host_mcp
+    endpoints:
+      - host: 172.17.0.1
+        port: 5010
+        protocol: rest
+        enforcement: enforce
+        allowed_ips:
+          - "172.17.0.1/32"
+        rules:
+          - allow: { method: GET, path: "/**" }
+          - allow: { method: POST, path: "/**" }
+          - allow: { method: OPTIONS, path: "/**" }
+    binaries:
+      - { path: /usr/local/bin/openclaw }
+      - { path: /usr/local/bin/node }
+      - { path: /usr/local/bin/node* }
+      - { path: /usr/bin/node* }
+
   # npm registry — needed for `openclaw plugins install` and `npm install`.
   # Read-only: agents only fetch packages, never publish.
   npm_registry:
