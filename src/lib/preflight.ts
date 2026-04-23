@@ -536,8 +536,9 @@ export async function checkPortAvailable(
       // see listeners owned by root (e.g., docker-proxy, leftover gateway).
       // Retry with sudo -n to identify root-owned listeners before falling
       // through to the net probe (which can only detect EADDRINUSE but not
-      // the owning process).
-      if (!o.lsofOutput) {
+      // the owning process). Skip the sudo retry when the caller injected
+      // a fake lsofOutput (even an empty one) to keep unit tests hermetic.
+      if (typeof o.lsofOutput !== "string") {
         const sudoOut: string | undefined = runCapture(
           `sudo -n lsof -i :${p} -sTCP:LISTEN -P -n 2>/dev/null`,
           { ignoreError: true },

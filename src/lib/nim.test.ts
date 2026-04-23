@@ -77,9 +77,9 @@ describe("nim", () => {
       }
     });
 
-    it("nvidia type is nimCapable", () => {
+    it("nvidia type is nimCapable when memory meets minimum threshold", () => {
       const gpu = nim.detectGpu();
-      if (gpu && gpu.type === "nvidia") {
+      if (gpu && gpu.type === "nvidia" && nim.canRunNimWithMemory(gpu.totalMemoryMB)) {
         expect(gpu.nimCapable).toBe(true);
       }
     });

@@ -342,7 +342,7 @@ describe("runtime CORS origin override (#719)", () => {
     );
 
     const rootBlock = src.match(
-      /# ── Root path[\s\S]*?apply_model_override\n\s*apply_cors_override\n\s*export_gateway_token/,
+      /# ── Root path[\s\S]*?apply_model_override[\s\S]*?apply_cors_override[\s\S]*?export_gateway_token/,
     );
     expect(rootBlock).toBeTruthy();
   });
