@@ -47,6 +47,9 @@ filesystem_policy:
     - /sandbox/.nemoclaw            # Plugin state and config (state.ts, config.ts).
                                     # Blueprints are root-owned; sticky bit (1755)
                                     # on parent prevents rename/delete (#1607).
+    - /sandbox/repos                # Persistent git workspaces cloned by the agent.
+                                    # GitHub write access is gated at credential layer
+                                    # (fine-grained PAT); local disk write is safe.
 
 landlock:
   compatibility: best_effort
@@ -56,49 +59,9 @@ process:
   run_as_group: sandbox
 
 network_policies:
-  claude_code:
-    name: claude_code
-    endpoints:
-      - host: api.anthropic.com
-        port: 443
-        protocol: rest
-        enforcement: enforce
-        tls: terminate
-        rules:
-          - allow: { method: POST, path: "/v1/messages" }
-          - allow: { method: POST, path: "/v1/messages/batches" }
-          - allow: { method: GET, path: "/v1/messages/batches/**" }
-          - allow: { method: POST, path: "/v1/complete" }
-      - host: statsig.anthropic.com
-        port: 443
-        protocol: rest
-        enforcement: enforce
-        tls: terminate
-        rules:
-          - allow: { method: POST, path: "/**" }
-      # sentry.io is a multi-tenant SaaS — any authenticated client can POST
-      # to ANY Sentry project, not just NemoClaw's. Allowing POST /** turned
-      # the host into a generic exfiltration channel: a compromised agent
-      # could ship stack traces, env vars, file contents, etc. to a Sentry
-      # project controlled by an attacker via the public envelope endpoint
-      # (https://sentry.io/api/<any-project>/envelope/). Path-pattern
-      # restrictions cannot fix this because the project ID is part of the
-      # URL and there is no server-side allowlist of legitimate projects.
-      #
-      # Block POST entirely. GET stays allowed because it has no request
-      # body and is harmless for exfil. Side effect: Claude Code's crash
-      # telemetry to Sentry is silently dropped — that is the right
-      # tradeoff for a sandbox whose stated goal is preventing data egress.
-      # See #1437.
-      - host: sentry.io
-        port: 443
-        protocol: rest
-        enforcement: enforce
-        tls: terminate
-        rules:
-          - allow: { method: GET, path: "/**" }
-    binaries:
-      - { path: /usr/local/bin/claude }
+  # NOTE: claude_code (api.anthropic.com, statsig.anthropic.com, sentry.io)
+  # was removed from the base policy — /usr/local/bin/claude is not present
+  # in the sandbox image. Move to a preset if Claude Code is re-added.
 
   nvidia:
     name: nvidia
@@ -172,18 +135,8 @@ network_policies:
       - { path: /usr/local/bin/openclaw }
       - { path: /usr/local/bin/node }
 
-  openclaw_docs:
-    name: openclaw_docs
-    endpoints:
-      - host: docs.openclaw.ai
-        port: 443
-        protocol: rest
-        enforcement: enforce
-        tls: terminate
-        rules:
-          - allow: { method: GET, path: "/**" }
-    binaries:
-      - { path: /usr/local/bin/openclaw }
+  # openclaw_docs moved to presets/full-stack-docs.yaml — opt-in for dev sandboxes only.
+  # See: https://github.com/NVIDIA/NemoClaw/blob/main/nemoclaw-blueprint/policies/presets/full-stack-docs.yaml
 
   # Host-side MCP server (dell-workstation) — allows the sandbox OpenClaw gateway
   # to connect to the mem0 MCP HTTP/SSE server running on the host via the

@@ -66,6 +66,11 @@ ARG NEMOCLAW_WEB_CONFIG_B64=e30=
 # Format: {"<name>":{"url":"<url>","transport":"sse"}} or similar.
 # Default: empty map (no MCP servers).
 ARG NEMOCLAW_MCP_SERVERS_B64=e30=
+# Base64-encoded JSON object merged into plugins.entries.memory-core.config.
+# Supports any memory-core plugin config key, including dreaming.
+# Format: {"dreaming":{"enabled":true,"timezone":"America/New_York"}}
+# Default: empty object (no memory plugin overrides).
+ARG NEMOCLAW_MEMORY_CONFIG_B64=e30=
 # Base64-encoded JSON list of messaging channel names to pre-configure
 # (e.g. ["discord","telegram"]). Channels are added with placeholder tokens
 # so the L7 proxy can rewrite them at egress. Default: empty list.
@@ -103,6 +108,7 @@ ENV NEMOCLAW_MODEL=${NEMOCLAW_MODEL} \
     NEMOCLAW_INFERENCE_COMPAT_B64=${NEMOCLAW_INFERENCE_COMPAT_B64} \
     NEMOCLAW_WEB_CONFIG_B64=${NEMOCLAW_WEB_CONFIG_B64} \
     NEMOCLAW_MCP_SERVERS_B64=${NEMOCLAW_MCP_SERVERS_B64} \
+    NEMOCLAW_MEMORY_CONFIG_B64=${NEMOCLAW_MEMORY_CONFIG_B64} \
     NEMOCLAW_MESSAGING_CHANNELS_B64=${NEMOCLAW_MESSAGING_CHANNELS_B64} \
     NEMOCLAW_MESSAGING_ALLOWED_IDS_B64=${NEMOCLAW_MESSAGING_ALLOWED_IDS_B64} \
     NEMOCLAW_DISCORD_GUILDS_B64=${NEMOCLAW_DISCORD_GUILDS_B64} \
@@ -130,6 +136,7 @@ inference_api = os.environ['NEMOCLAW_INFERENCE_API']; \
 inference_compat = json.loads(base64.b64decode(os.environ['NEMOCLAW_INFERENCE_COMPAT_B64']).decode('utf-8')); \
 web_config = json.loads(base64.b64decode(os.environ.get('NEMOCLAW_WEB_CONFIG_B64', 'e30=') or 'e30=').decode('utf-8')); \
 mcp_servers = json.loads(base64.b64decode(os.environ.get('NEMOCLAW_MCP_SERVERS_B64', 'e30=') or 'e30=').decode('utf-8')); \
+memory_plugin_cfg = json.loads(base64.b64decode(os.environ.get('NEMOCLAW_MEMORY_CONFIG_B64', 'e30=') or 'e30=').decode('utf-8')); \
 msg_channels = json.loads(base64.b64decode(os.environ.get('NEMOCLAW_MESSAGING_CHANNELS_B64', 'W10=') or 'W10=').decode('utf-8')); \
 _allowed_ids = json.loads(base64.b64decode(os.environ.get('NEMOCLAW_MESSAGING_ALLOWED_IDS_B64', 'e30=') or 'e30=').decode('utf-8')); \
 _discord_guilds = json.loads(base64.b64decode(os.environ.get('NEMOCLAW_DISCORD_GUILDS_B64', 'e30=') or 'e30=').decode('utf-8')); \
@@ -184,6 +191,8 @@ config.update({'mcp': {'servers': mcp_servers}}) if mcp_servers else None; \
 _stdio_cfg = {k: {kk: vv for kk, vv in v.items() if kk in ('command', 'args', 'env')} for k, v in mcp_servers.items() if v.get('command')}; \
 config.setdefault('plugins', {}).setdefault('entries', {}).setdefault('acpx', {}).setdefault('config', {}).setdefault('mcpServers', {}).update(_stdio_cfg) if _stdio_cfg else None; \
 config.setdefault('commands', {})['mcp'] = bool(mcp_servers); \
+config.setdefault('plugins', {}).setdefault('entries', {}).setdefault('memory-core', {}).setdefault('config', {}).update(memory_plugin_cfg) if memory_plugin_cfg else None; \
+config.setdefault('plugins', {}).setdefault('entries', {}).setdefault('openrouter', {})['enabled'] = False; \
 path = os.path.expanduser('~/.openclaw/openclaw.json'); \
 json.dump(config, open(path, 'w'), indent=2); \
 os.chmod(path, 0o600)"

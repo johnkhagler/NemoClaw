@@ -28,3 +28,5 @@ network_policies:
     binaries:
       - { path: /usr/bin/gh }
       - { path: /usr/bin/git }
+      - { path: /usr/lib/git-core/git-remote-http }
+      - { path: /usr/lib/git-core/git-remote-https }

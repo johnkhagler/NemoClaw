@@ -1,0 +1,43 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Full-stack documentation preset.
+#
+# Covers all three tiers of the NemoClaw stack:
+#   - docs.openclaw.ai       — OpenClaw agent runtime docs
+#   - docs.nvidia.com        — NemoClaw and OpenShell docs (hosted under /nemoclaw/ and /openshell/)
+#
+# Intended for development sandboxes (e.g. dj-dev) where the agent benefits
+# from self-directed reading of its own architecture and constraints.
+# Not included in the base policy — production/assistant sandboxes should not
+# have this egress by default.
+#
+# Apply with: openshell policy set <sandbox> --preset full-stack-docs
+# Or select during: nemoclaw onboard
+
+preset:
+  name: full-stack-docs
+  description: "Read-only access to OpenClaw, NemoClaw, and OpenShell documentation (dev sandboxes)"
+
+network_policies:
+  full_stack_docs:
+    name: full_stack_docs
+    endpoints:
+      - host: docs.openclaw.ai
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        tls: terminate
+        rules:
+          - allow: { method: GET, path: "/**" }
+      - host: docs.nvidia.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        tls: terminate
+        rules:
+          - allow: { method: GET, path: "/nemoclaw/**" }
+          - allow: { method: GET, path: "/openshell/**" }
+    binaries:
+      - { path: /usr/local/bin/openclaw }
+      - { path: /usr/local/bin/node }

@@ -1044,6 +1044,13 @@ function patchStagedDockerfile(
       `ARG NEMOCLAW_MCP_SERVERS_B64=${encodeDockerJsonArg(mcpServers)}`,
     );
   }
+  const memoryConfigRaw = (process.env.NEMOCLAW_MEMORY_CONFIG_B64 ?? "").trim();
+  if (memoryConfigRaw) {
+    dockerfile = dockerfile.replace(
+      /^ARG NEMOCLAW_MEMORY_CONFIG_B64=.*$/m,
+      `ARG NEMOCLAW_MEMORY_CONFIG_B64=${memoryConfigRaw}`,
+    );
+  }
   fs.writeFileSync(dockerfilePath, dockerfile);
 }
 
