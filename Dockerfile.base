@@ -51,6 +51,7 @@
 FROM node:22-slim@sha256:4f77a690f2f8946ab16fe1e791a3ac0667ae1c3575c3e4d0d4589e9ed5bfaf3d
 
 ENV DEBIAN_FRONTEND=noninteractive
+ENV AWS_EC2_METADATA_DISABLED=true
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         python3=3.11.2-1+b1 \
@@ -148,7 +149,7 @@ RUN printf '%s\n' \
 # OpenClaw version: change the OPENCLAW_VERSION ARG default so CI rebuilds
 # the base image on push to main, or use workflow_dispatch on base-image.yaml
 # with the openclaw_version input for a one-off build without editing this file.
-ARG OPENCLAW_VERSION=2026.4.11
+ARG OPENCLAW_VERSION=2026.5.7
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
