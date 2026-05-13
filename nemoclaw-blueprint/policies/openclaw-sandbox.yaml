@@ -59,9 +59,30 @@ process:
   run_as_group: sandbox
 
 network_policies:
-  # NOTE: claude_code (api.anthropic.com, statsig.anthropic.com, sentry.io)
-  # was removed from the base policy — /usr/local/bin/claude is not present
-  # in the sandbox image. Move to a preset if Claude Code is re-added.
+  # NOTE: api.anthropic.com and statsig.anthropic.com were removed from the
+  # base policy — /usr/local/bin/claude is not present in the sandbox image.
+  # Move to a preset if Claude Code is re-added.
+  #
+  # sentry.io remains here (not in the claude_code preset) because the POST
+  # block is a multi-tenant exfiltration guardrail that applies regardless of
+  # which tools are installed. See regression #1437.
+  sentry_exfil_guard:
+    name: sentry_exfil_guard
+    endpoints:
+      # sentry.io is a multi-tenant SaaS — any authenticated client can POST
+      # to ANY Sentry project, not just NemoClaw's. Allowing POST /** turns
+      # the host into a generic exfiltration channel. Block POST entirely;
+      # GET stays allowed because it has no request body. See #1437.
+      - host: sentry.io
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        tls: terminate
+        rules:
+          - allow: { method: GET, path: "/**" }
+    binaries:
+      - { path: /usr/local/bin/openclaw }
+      - { path: /usr/local/bin/node }
 
   nvidia:
     name: nvidia
