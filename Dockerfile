@@ -71,6 +71,11 @@ ARG NEMOCLAW_MCP_SERVERS_B64=e30=
 # Format: {"dreaming":{"enabled":true,"timezone":"America/New_York"}}
 # Default: empty object (no memory plugin overrides).
 ARG NEMOCLAW_MEMORY_CONFIG_B64=e30=
+# Base64-encoded JSON array of extra agent config objects to bake into
+# agents.list[]. Each entry must include id, workspace, agentDir, tools,
+# and subagents fields. Default: empty array (no extra agents).
+# Format: [{"id":"research","workspace":"/...","agentDir":"/...","tools":{...},"subagents":{"maxSpawnDepth":0}}]
+ARG NEMOCLAW_EXTRA_AGENTS_JSON_B64=W10=
 # Base64-encoded JSON list of messaging channel names to pre-configure
 # (e.g. ["discord","telegram"]). Channels are added with placeholder tokens
 # so the L7 proxy can rewrite them at egress. Default: empty list.
@@ -109,6 +114,7 @@ ENV NEMOCLAW_MODEL=${NEMOCLAW_MODEL} \
     NEMOCLAW_WEB_CONFIG_B64=${NEMOCLAW_WEB_CONFIG_B64} \
     NEMOCLAW_MCP_SERVERS_B64=${NEMOCLAW_MCP_SERVERS_B64} \
     NEMOCLAW_MEMORY_CONFIG_B64=${NEMOCLAW_MEMORY_CONFIG_B64} \
+    NEMOCLAW_EXTRA_AGENTS_JSON_B64=${NEMOCLAW_EXTRA_AGENTS_JSON_B64} \
     NEMOCLAW_MESSAGING_CHANNELS_B64=${NEMOCLAW_MESSAGING_CHANNELS_B64} \
     NEMOCLAW_MESSAGING_ALLOWED_IDS_B64=${NEMOCLAW_MESSAGING_ALLOWED_IDS_B64} \
     NEMOCLAW_DISCORD_GUILDS_B64=${NEMOCLAW_DISCORD_GUILDS_B64} \
@@ -173,26 +179,17 @@ config = { \
         'auth': {'token': secrets.token_hex(32)} \
     } \
 }; \
-config.update({ \
-    'tools': { \
-        'web': { \
-            'search': { \
-                'enabled': True, \
-                'provider': 'brave', \
-                **({'apiKey': web_config.get('apiKey', '')} if web_config.get('apiKey', '') else {}) \
-            }, \
-            'fetch': { \
-                'enabled': bool(web_config.get('fetchEnabled', True)) \
-            } \
-        } \
-    } \
-} if web_config.get('provider') == 'brave' else {}); \
+_web = web_config.get('provider'); \
+_fetch_enabled = bool(web_config.get('fetchEnabled', True)); \
+config.update({'tools': {'web': {'search': {'enabled': True, 'provider': 'brave', **({'apiKey': web_config.get('apiKey', '')} if web_config.get('apiKey', '') else {})}, 'fetch': {'enabled': _fetch_enabled}}}} if _web == 'brave' else ({'tools': {'web': {'search': {'enabled': True, 'provider': 'duckduckgo'}, 'fetch': {'enabled': _fetch_enabled}}}} if _web == 'duckduckgo' else {})); \
 config.update({'mcp': {'servers': mcp_servers}}) if mcp_servers else None; \
 _stdio_cfg = {k: {kk: vv for kk, vv in v.items() if kk in ('command', 'args', 'env')} for k, v in mcp_servers.items() if v.get('command')}; \
 config.setdefault('plugins', {}).setdefault('entries', {}).setdefault('acpx', {}).setdefault('config', {}).setdefault('mcpServers', {}).update(_stdio_cfg) if _stdio_cfg else None; \
 config.setdefault('commands', {})['mcp'] = bool(mcp_servers); \
 config.setdefault('plugins', {}).setdefault('entries', {}).setdefault('memory-core', {}).setdefault('config', {}).update(memory_plugin_cfg) if memory_plugin_cfg else None; \
 config.setdefault('plugins', {}).setdefault('entries', {}).setdefault('openrouter', {})['enabled'] = False; \
+extra_agents = json.loads(base64.b64decode(os.environ.get('NEMOCLAW_EXTRA_AGENTS_JSON_B64', 'W10=') or 'W10=').decode('utf-8')); \
+config['agents'].update({'list': extra_agents}) if extra_agents else None; \
 path = os.path.expanduser('~/.openclaw/openclaw.json'); \
 json.dump(config, open(path, 'w'), indent=2); \
 os.chmod(path, 0o600)"

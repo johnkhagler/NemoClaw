@@ -866,6 +866,12 @@ async function ensureValidatedBraveSearchCredential() {
 }
 
 async function configureWebSearch(existingConfig = null) {
+  // DuckDuckGo: keyless provider — no credential steps or API key needed.
+  const webProvider = (process.env.NEMOCLAW_WEB_PROVIDER ?? "").trim().toLowerCase();
+  if (webProvider === "duckduckgo") {
+    return { provider: "duckduckgo", fetchEnabled: true };
+  }
+
   if (existingConfig) {
     return { fetchEnabled: true };
   }
@@ -1050,6 +1056,16 @@ function patchStagedDockerfile(
       /^ARG NEMOCLAW_MEMORY_CONFIG_B64=.*$/m,
       `ARG NEMOCLAW_MEMORY_CONFIG_B64=${memoryConfigRaw}`,
     );
+  }
+  const extraAgentsRaw = (process.env.NEMOCLAW_EXTRA_AGENTS_JSON ?? "").trim();
+  if (extraAgentsRaw) {
+    const extraAgents = JSON.parse(extraAgentsRaw) as unknown[];
+    if (Array.isArray(extraAgents) && extraAgents.length > 0) {
+      dockerfile = dockerfile.replace(
+        /^ARG NEMOCLAW_EXTRA_AGENTS_JSON_B64=.*$/m,
+        `ARG NEMOCLAW_EXTRA_AGENTS_JSON_B64=${encodeDockerJsonArg(extraAgents)}`,
+      );
+    }
   }
   fs.writeFileSync(dockerfilePath, dockerfile);
 }
@@ -2335,7 +2351,7 @@ async function createSandbox(
     },
   ].filter(({ envKey }) => !enabledEnvKeys || enabledEnvKeys.has(envKey));
 
-  if (webSearchConfig) {
+  if (webSearchConfig && webSearchConfig.provider !== "duckduckgo") {
     messagingTokenDefs.push({
       name: `${sandboxName}-brave-search`,
       envKey: webSearch.BRAVE_API_KEY_ENV,
@@ -2481,7 +2497,7 @@ async function createSandbox(
   }
 
   console.log(`  Creating sandbox '${sandboxName}' (this takes a few minutes on first run)...`);
-  if (webSearchConfig && !getCredential(webSearch.BRAVE_API_KEY_ENV)) {
+  if (webSearchConfig && webSearchConfig.provider !== "duckduckgo" && !getCredential(webSearch.BRAVE_API_KEY_ENV)) {
     console.error("  Brave Search is enabled, but BRAVE_API_KEY is not available in this process.");
     console.error(
       "  Re-run with BRAVE_API_KEY set, or disable Brave Search before recreating the sandbox.",
@@ -3764,7 +3780,8 @@ function getSuggestedPolicyPresets({ enabledChannels = null, webSearchConfig = n
   maybeSuggestMessagingPreset("slack", "SLACK_BOT_TOKEN");
   maybeSuggestMessagingPreset("discord", "DISCORD_BOT_TOKEN");
 
-  if (webSearchConfig) suggestions.push("brave");
+  if (webSearchConfig && webSearchConfig.provider !== "duckduckgo") suggestions.push("brave");
+  if (webSearchConfig?.provider === "duckduckgo") suggestions.push("duckduckgo");
 
   return suggestions;
 }

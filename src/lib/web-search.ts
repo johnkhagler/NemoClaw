@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 export interface WebSearchConfig {
+  provider?: "brave" | "duckduckgo";
   fetchEnabled: boolean;
 }
 
@@ -15,6 +16,10 @@ export function buildWebSearchDockerConfig(
   config: WebSearchConfig | null,
 ): string {
   if (!config || config.fetchEnabled !== true) return encodeDockerJsonArg({});
+
+  if (config.provider === "duckduckgo") {
+    return encodeDockerJsonArg({ provider: "duckduckgo", fetchEnabled: true });
+  }
 
   const payload = {
     provider: "brave",
